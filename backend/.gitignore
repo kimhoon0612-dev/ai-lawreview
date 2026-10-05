@@ -1,0 +1,29 @@
+# Environment variables
+.env
+.env.*
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+
+# Databases
+lawreview.db
+*.db
+*.sqlite
+*.sqlite3
+chroma_db/
+
+# Test artifacts
+test_contract.pdf
+
+# Logs & temp
+*.log
+
+# IDE
+.vscode/
+.idea/

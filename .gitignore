@@ -1,0 +1,59 @@
+# ============================================================
+# Root .gitignore for AI LawReview Project
+# ============================================================
+
+# Environment variables & API Keys (DO NOT COMMIT)
+.env
+.env.*
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# SQLite & Local Databases (Contains private user data & analysis history)
+*.db
+*.sqlite
+*.sqlite3
+lawreview.db
+chroma_db/
+backend/chroma_db/
+backend/lawreview.db
+
+# Node.js & Next.js
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Vercel
+.vercel/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# OS & Temp Files
+.DS_Store
+Thumbs.db
+*.pem
+*.key
+*.log
+test_contract.pdf
+backend/test_contract.pdf
+
+# IDEs
+.idea/
+.vscode/
+*.swp
