@@ -61,11 +61,12 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS 설정 (환경변수 기반)
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+# CORS 설정 (환경변수 및 Vercel 도메인 지원)
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[origin.strip() for origin in CORS_ORIGINS if origin.strip()],
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -542,15 +543,6 @@ async def sync_law_database():
         if vector_store is None:
             raise HTTPException(status_code=500, detail="Vector Store 초기화 실패")
 
-        # 기존 법령 데이터 삭제 (사용자 자료 보존)
-        try:
-            existing = vector_store._collection.get(where={"source_type": "law"})
-            ids = existing.get("ids", [])
-            if ids:
-                vector_store._collection.delete(ids=ids)
-        except Exception:
-            pass
-
         result = sync_laws_from_api()
         documents = result.get("documents", [])
         if documents:
@@ -613,15 +605,6 @@ async def sync_ordinances():
         vector_store = get_vector_store()
         if vector_store is None:
             raise HTTPException(status_code=500, detail="Vector Store 초기화 실패")
-
-        # 기존 자치법규 데이터 삭제 후 최신화
-        try:
-            existing = vector_store._collection.get(where={"source_type": "ordinance"})
-            ids = existing.get("ids", [])
-            if ids:
-                vector_store._collection.delete(ids=ids)
-        except Exception:
-            pass
 
         result = sync_ordinances_from_api()
         documents = result.get("documents", [])
