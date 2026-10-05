@@ -164,13 +164,67 @@ def delete_custom_document(doc_id: str) -> dict:
         return {"status": "error", "message": f"삭제 중 오류 발생: {str(e)}"}
 
 
+def sqlite_search_fallback(query: str, scope: str = "all", limit: int = 15) -> List[dict]:
+    """ChromaDB의 HNSW 인덱스 오류 발생 시 SQLite를 통해 법령 전문을 직접 검색하는 안전 폴백입니다."""
+    import sqlite3
+    db_path = os.path.join(DB_DIR, "chroma.sqlite3")
+    if not os.path.exists(db_path):
+        return []
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        scope_filter = ""
+        params = [f"%{query}%", f"%{query}%"]
+        if scope in ["law", "ordinance", "custom"]:
+            scope_filter = "AND m_type.string_value = ?"
+            params.append(scope)
+        params.append(limit)
+
+        sql = f"""
+            SELECT 
+                m_src.string_value AS source_name,
+                COALESCE(m_art.string_value, '') AS article,
+                COALESCE(m_type.string_value, 'law') AS source_type,
+                COALESCE(m_org.string_value, '') AS org,
+                fts.string_value AS content,
+                m_src.id AS doc_id
+            FROM embedding_fulltext_search fts
+            JOIN embeddings e ON fts.rowid = e.seq_id
+            JOIN embedding_metadata m_src ON m_src.id = e.id AND m_src.key = 'source'
+            LEFT JOIN embedding_metadata m_art ON m_art.id = e.id AND m_art.key = 'article'
+            LEFT JOIN embedding_metadata m_type ON m_type.id = e.id AND m_type.key = 'source_type'
+            LEFT JOIN embedding_metadata m_org ON m_org.id = e.id AND m_org.key = 'org'
+            WHERE (fts.string_value LIKE ? OR m_src.string_value LIKE ?)
+            {scope_filter}
+            LIMIT ?
+        """
+        cur.execute(sql, params)
+        results = []
+        for row in cur.fetchall():
+            results.append({
+                "doc_id": row[5],
+                "source_type": row[2],
+                "source_name": row[0],
+                "article": row[1] or "",
+                "category": row[2],
+                "org": row[3],
+                "content": row[4],
+                "score": 92.0
+            })
+        conn.close()
+        return results
+    except Exception as err:
+        print(f"SQLite search fallback error: {err}")
+        return []
+
+
 def search_documents(query: str, scope: str = "all", limit: int = 8) -> List[dict]:
     """ChromaDB 내 법령 및 사내 등록 문서를 시맨틱 검색합니다.
-    scope: 'all' | 'law' | 'custom'
+    scope: 'all' | 'law' | 'custom' | 'ordinance'
     """
     vector_store = get_vector_store()
     if vector_store is None:
-        return []
+        return sqlite_search_fallback(query, scope, limit)
 
     try:
         filter_dict = None
@@ -204,10 +258,14 @@ def search_documents(query: str, scope: str = "all", limit: int = 8) -> List[dic
                 "category": category,
                 "org": org,
                 "content": doc.page_content,
-                "score": round(score_val * 100, 1),  # 백분율 환산
+                "score": round(score_val * 100, 1),
             })
+
+        if not results and query:
+            # 벡터 스코어 임계치로 필터링되어 비어있는 경우 SQLite 텍스트 검색으로 보완
+            return sqlite_search_fallback(query, scope, limit)
 
         return results
     except Exception as e:
-        print(f"Error during document search: {e}")
-        return []
+        print(f"Error during document search, falling back to SQLite: {e}")
+        return sqlite_search_fallback(query, scope, limit)

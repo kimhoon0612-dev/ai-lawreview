@@ -666,6 +666,100 @@ async def get_ordinance_articles(mst: str):
     }
 
 
+@app.get("/api/laws/catalog")
+async def get_laws_catalog_endpoint():
+    """DB에 적재된 모든 국가 법령 및 천안시 자치법규의 전체 목록과 조항 수를 반환합니다."""
+    import sqlite3
+    db_path = os.path.join(os.path.dirname(__file__), "chroma_db", "chroma.sqlite3")
+    if not os.path.exists(db_path):
+        return {"national": [], "ordinance": [], "total_laws": 0, "total_articles": 0}
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        sql = """
+            SELECT 
+                m_src.string_value AS source_name,
+                COALESCE(m_type.string_value, 'law') AS source_type,
+                COALESCE(m_org.string_value, '') AS org,
+                COUNT(DISTINCT m_src.id) AS article_count
+            FROM embedding_metadata m_src
+            LEFT JOIN embedding_metadata m_type ON m_src.id = m_type.id AND m_type.key = 'source_type'
+            LEFT JOIN embedding_metadata m_org ON m_src.id = m_org.id AND m_org.key = 'org'
+            WHERE m_src.key = 'source'
+            GROUP BY m_src.string_value
+            ORDER BY article_count DESC
+        """
+        cur.execute(sql)
+        national = []
+        ordinances = []
+        for name, stype, org, count in cur.fetchall():
+            item = {
+                "name": name,
+                "type": stype,
+                "org": org or ("충청남도 천안시" if stype == "ordinance" else "대한민국"),
+                "count": count
+            }
+            if stype == "ordinance":
+                ordinances.append(item)
+            else:
+                national.append(item)
+        conn.close()
+        return {
+            "national": national,
+            "ordinance": ordinances,
+            "total_laws": len(national) + len(ordinances),
+            "total_articles": sum(x["count"] for x in national) + sum(x["count"] for x in ordinances)
+        }
+    except Exception as e:
+        print(f"Error fetching laws catalog: {e}")
+        return {"national": [], "ordinance": [], "total_laws": 0, "total_articles": 0}
+
+
+@app.get("/api/laws/full-text")
+async def get_law_full_text_endpoint(source_name: str):
+    """특정 법률 또는 자치법규의 제1조부터 마지막 조항까지 전체 전문을 반환합니다."""
+    import sqlite3
+    db_path = os.path.join(os.path.dirname(__file__), "chroma_db", "chroma.sqlite3")
+    if not os.path.exists(db_path):
+        return {"source_name": source_name, "total": 0, "articles": []}
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        sql = """
+            SELECT 
+                COALESCE(m_art.string_value, '') AS article,
+                fts.string_value AS content,
+                COALESCE(m_org.string_value, '') AS org
+            FROM embedding_metadata m_src
+            LEFT JOIN embedding_metadata m_art ON m_src.id = m_art.id AND m_art.key = 'article'
+            LEFT JOIN embedding_metadata m_org ON m_src.id = m_org.id AND m_org.key = 'org'
+            JOIN embeddings e ON m_src.id = e.id
+            JOIN embedding_fulltext_search fts ON fts.rowid = e.seq_id
+            WHERE m_src.key = 'source' AND m_src.string_value = ?
+            ORDER BY e.seq_id ASC
+        """
+        cur.execute(sql, (source_name,))
+        articles = []
+        org_name = ""
+        for art, content, org in cur.fetchall():
+            if org and not org_name:
+                org_name = org
+            articles.append({
+                "article": art,
+                "content": content
+            })
+        conn.close()
+        return {
+            "source_name": source_name,
+            "org": org_name or "대한민국",
+            "total": len(articles),
+            "articles": articles
+        }
+    except Exception as e:
+        print(f"Error fetching law full text for {source_name}: {e}")
+        return {"source_name": source_name, "total": 0, "articles": []}
+
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8001))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
