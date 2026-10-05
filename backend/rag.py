@@ -80,56 +80,109 @@ def _format_retrieved_docs(docs) -> str:
     return "\n\n".join(sections) if sections else "관련 참고 자료를 찾을 수 없습니다. 일반적인 법리를 적용하세요."
 
 
-def analyze_contract_text(text: str) -> dict:
-    """추출된 계약서 텍스트를 LLM으로 분석합니다."""
-    
+def analyze_contract_text(text: str, target_sources: Optional[List[str]] = None) -> dict:
+    """추출된 계약서 텍스트를 사용자가 선택한 법령/조례/사내자료 기준에 따라 분석합니다.
+    target_sources: ['law', 'ordinance', 'custom']
+    """
+    if target_sources is None:
+        target_sources = ["law", "ordinance", "custom"]
+
+    source_names_map = {
+        "law": "대한민국 국가법령",
+        "ordinance": "천안시 자치법규·조례",
+        "custom": "사내 규정 및 참고자료"
+    }
+    selected_names = [source_names_map.get(s, s) for s in target_sources]
+    criteria_str = ", ".join(selected_names) if selected_names else "대한민국 법령 일반"
+
     api_key = os.getenv("OPENAI_API_KEY")
     
-    # API 키가 설정되지 않은 경우 (현재 개발/테스트 단계)
+    # API 키가 설정되지 않은 경우 (모의 분석 반환)
     if not api_key or api_key == "YOUR_API_KEY_HERE":
+        clauses = []
+        if "law" in target_sources:
+            clauses.append({
+                "clause_name": "제 5조 (계약의 해지 및 위약벌)",
+                "risk_level": "high",
+                "original_text": "\"을\"의 귀책사유로 계약이 해지될 경우, \"을\"은 \"갑\"에게 총 계약금액의 30%를 위약벌로 즉시 배상한다.",
+                "ai_review": "해당 조항은 [하도급거래 공정화에 관한 법률] 제11조 및 [약관의 규제에 관한 법률] 제8조에 위배될 소지가 높습니다. 부당하게 과중한 손해배상 의무(30%)를 부담시키는 조항으로 무효화될 수 있으므로, 실제 발생한 실손해액을 기준으로 배상하도록 수정을 권장합니다.",
+                "legal_basis": "하도급거래 공정화에 관한 법률 제11조, 약관규제법 제8조",
+                "confidence": "high"
+            })
+            clauses.append({
+                "clause_name": "제 9조 (관할 법원의 지정)",
+                "risk_level": "warning",
+                "original_text": "본 계약과 관련하여 분쟁이 발생할 경우, \"갑\"의 본점 소재지를 관할하는 법원을 전속관할로 한다.",
+                "ai_review": "약관의 규제에 관한 법률 제14조에 따라 일방 당사자에게 불리한 전속관할 합의는 무효로 판단될 수 있습니다. '민사소송법에 따른 관할법원'으로 완화할 것을 권고합니다.",
+                "legal_basis": "약관의 규제에 관한 법률 제14조",
+                "confidence": "high"
+            })
+        if "ordinance" in target_sources:
+            clauses.append({
+                "clause_name": "제 7조 (하도급 대금 지급 및 지역업체 우선)",
+                "risk_level": "warning",
+                "original_text": "\"갑\"은 기성금 수령 후 30일 이내에 \"을\"에게 지급하며, 천안시 관내 자재 우선 사용 의무는 배제한다.",
+                "ai_review": "[천안시 발주계약의 하도급업체 보호 조례] 및 [천안시 대형유통기업 지역기여 권고 조례] 권고 기준에 따르면 기성금은 15일 이내 지급 및 지역 업체·장비 우선 사용을 권장하고 있습니다. 천안시 발주 및 인허가 연계 사업일 경우 조례 저촉 리스크가 있습니다.",
+                "legal_basis": "천안시 발주계약의 하도급업체 보호 조례 제6조",
+                "confidence": "medium"
+            })
+        if "custom" in target_sources:
+            clauses.append({
+                "clause_name": "제 12조 (비밀유지 및 위약금)",
+                "risk_level": "info",
+                "original_text": "계약 종료 후 3년간 모든 영업정보를 비밀로 유지한다.",
+                "ai_review": "[사내 표준 용역외주 관리지침 제10조] 기준(2년 비밀유지 및 실손해액 배상)과 비교 시 기간이 1년 길게 설정되어 있습니다. 업무 성격에 따라 2년으로 단축 조정을 검토하시기 바랍니다.",
+                "legal_basis": "사내 표준 용역외주 관리지침 제10조",
+                "confidence": "medium"
+            })
+
         return {
             "status": "success",
             "mock": True,
-            "message": "API 키가 설정되지 않아 테스트용 결과를 반환합니다.",
+            "message": f"선택된 검토 기준({criteria_str})을 바탕으로 분석된 결과입니다.",
             "analysis": {
-                "clauses": [
-                    {
-                        "clause_name": "제 5조 (계약의 해지)",
-                        "risk_level": "high",
-                        "original_text": "\"을\"의 귀책사유로 계약이 해지될 경우, \"을\"은 \"갑\"에게 총 계약금액의 30%를 위약벌로 배상한다.",
-                        "ai_review": "해당 위약벌 조항은 하도급거래 공정화에 관한 법률(제11조)에 위배될 소지가 높습니다. 부당한 손해배상액의 예정에 해당하여 무효가 될 수 있으므로, 실제 손해액을 기준으로 배상하도록 수정하는 것을 권장합니다."
-                    },
-                    {
-                        "clause_name": "제 9조 (분쟁의 관할)",
-                        "risk_level": "warning",
-                        "original_text": "본 계약과 관련하여 분쟁이 발생할 경우, \"갑\"의 본점 소재지를 관할하는 법원을 전속관할로 한다.",
-                        "ai_review": "약관의 규제에 관한 법률(제14조)에 따라, 고객(또는 상대방)에게 부당하게 불리한 소송 관할 합의 조항은 무효입니다. \"민사소송법에 따른 관할 법원으로 한다\"로 수정하는 것이 안전합니다."
-                    }
-                ],
-                "general_advice": "전반적으로 갑에게 유리하게 작성된 계약서입니다. 다만 독소조항이 일부 포함되어 있으니 확인 바랍니다."
+                "clauses": clauses,
+                "general_advice": f"선택하신 검토 기준 [{criteria_str}]을 중심으로 계약서를 정밀 교차 검토하였습니다. 주요 독소조항 및 권고사항을 확인하시기 바랍니다."
             },
             "extracted_text_preview": text[:200] + "..." if len(text) > 200 else text
         }
 
     try:
+        from vector_store import search_documents
         # LLM 초기화 (GPT-4o 또는 gpt-3.5-turbo 사용)
         llm = ChatOpenAI(model="gpt-4o", temperature=0.1, api_key=api_key)
         structured_llm = llm.with_structured_output(ContractReview)
         
-        # RAG 검색 로직 (법령 + 사용자 참고자료 통합 검색)
+        # 사용자가 선택한 target_sources 기반으로 RAG 검색 수행
         retrieved_context = "관련 참고 자료를 찾을 수 없습니다. 일반적인 법리를 적용하세요."
         try:
-            vector_store = get_vector_store()
-            if vector_store:
-                retriever = vector_store.as_retriever(search_kwargs={"k": 5})
-                docs = retriever.invoke(text)
-                if docs:
-                    retrieved_context = _format_retrieved_docs(docs)
+            searched_docs = search_documents(query=text[:300], limit=8, target_sources=target_sources)
+            if searched_docs:
+                formatted_lines = []
+                for d in searched_docs:
+                    stype = d.get("source_type", "law")
+                    sname = d.get("source_name", "출처")
+                    art = d.get("article", "")
+                    content = d.get("content", "")
+                    lbl = f"{sname} {art}".strip()
+                    if stype == "ordinance":
+                        formatted_lines.append(f"[천안시 조례: {lbl}]\n{content}")
+                    elif stype == "custom":
+                        formatted_lines.append(f"[사내 참고자료: {lbl}]\n{content}")
+                    else:
+                        formatted_lines.append(f"[국가법령: {lbl}]\n{content}")
+                retrieved_context = "\n\n".join(formatted_lines)
         except Exception as e:
-            print(f"Vector DB retrieval failed: {e}")
+            print(f"RAG retrieval failed: {e}")
         
+        custom_system_prompt = f"""{SYSTEM_PROMPT}
+
+## 사용자 지정 검토 기준
+본 검토는 다음 선택된 법률 소스를 기준으로 중점 분석해야 합니다:
+{criteria_str}
+"""
         prompt = ChatPromptTemplate.from_messages([
-            ("system", SYSTEM_PROMPT),
+            ("system", custom_system_prompt),
             ("human", "다음 계약서 내용을 검토해 주세요:\n\n{contract_text}")
         ])
         

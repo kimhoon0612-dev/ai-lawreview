@@ -164,8 +164,8 @@ def delete_custom_document(doc_id: str) -> dict:
         return {"status": "error", "message": f"삭제 중 오류 발생: {str(e)}"}
 
 
-def sqlite_search_fallback(query: str, scope: str = "all", limit: int = 15) -> List[dict]:
-    """ChromaDB의 HNSW 인덱스 오류 발생 시 SQLite를 통해 법령 전문을 직접 검색하는 안전 폴백입니다."""
+def sqlite_search_fallback(query: str, scope: str = "all", limit: int = 15, target_sources: Optional[List[str]] = None) -> List[dict]:
+    """ChromaDB의 HNSW 인덱스 오류 발생 시 SQLite를 통해 법령 및 조례 전문을 직접 검색하는 고신뢰 폴백입니다."""
     import sqlite3
     db_path = os.path.join(DB_DIR, "chroma.sqlite3")
     if not os.path.exists(db_path):
@@ -173,12 +173,27 @@ def sqlite_search_fallback(query: str, scope: str = "all", limit: int = 15) -> L
     try:
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
-        scope_filter = ""
-        params = [f"%{query}%", f"%{query}%"]
-        if scope in ["law", "ordinance", "custom"]:
-            scope_filter = "AND m_type.string_value = ?"
+        
+        where_clauses = ["m_src.key = 'source'"]
+        params = []
+
+        # 텍스트 검색 조건 (법령명, 조문명, 또는 본문)
+        if query and query.strip():
+            q_clean = query.strip()
+            where_clauses.append("(m_doc.string_value LIKE ? OR m_src.string_value LIKE ? OR m_art.string_value LIKE ?)")
+            params.extend([f"%{q_clean}%", f"%{q_clean}%", f"%{q_clean}%"])
+
+        # 스코프 필터링
+        if target_sources:
+            placeholders = ",".join(["?"] * len(target_sources))
+            where_clauses.append(f"COALESCE(m_type.string_value, 'law') IN ({placeholders})")
+            params.extend(target_sources)
+        elif scope in ["law", "ordinance", "custom"]:
+            where_clauses.append("COALESCE(m_type.string_value, 'law') = ?")
             params.append(scope)
+
         params.append(limit)
+        where_sql = " AND ".join(where_clauses)
 
         sql = f"""
             SELECT 
@@ -186,19 +201,27 @@ def sqlite_search_fallback(query: str, scope: str = "all", limit: int = 15) -> L
                 COALESCE(m_art.string_value, '') AS article,
                 COALESCE(m_type.string_value, 'law') AS source_type,
                 COALESCE(m_org.string_value, '') AS org,
-                fts.string_value AS content,
+                COALESCE(m_doc.string_value, '') AS content,
                 m_src.id AS doc_id
-            FROM embedding_fulltext_search fts
-            JOIN embeddings e ON fts.rowid = e.seq_id
-            JOIN embedding_metadata m_src ON m_src.id = e.id AND m_src.key = 'source'
-            LEFT JOIN embedding_metadata m_art ON m_art.id = e.id AND m_art.key = 'article'
-            LEFT JOIN embedding_metadata m_type ON m_type.id = e.id AND m_type.key = 'source_type'
-            LEFT JOIN embedding_metadata m_org ON m_org.id = e.id AND m_org.key = 'org'
-            WHERE (fts.string_value LIKE ? OR m_src.string_value LIKE ?)
-            {scope_filter}
+            FROM embedding_metadata m_src
+            LEFT JOIN embedding_metadata m_art ON m_art.id = m_src.id AND m_art.key = 'article'
+            LEFT JOIN embedding_metadata m_type ON m_type.id = m_src.id AND m_type.key = 'source_type'
+            LEFT JOIN embedding_metadata m_org ON m_org.id = m_src.id AND m_org.key = 'org'
+            LEFT JOIN embedding_metadata m_doc ON m_doc.id = m_src.id AND m_doc.key = 'chroma:document'
+            WHERE {where_sql}
+            ORDER BY 
+                CASE 
+                    WHEN m_src.string_value LIKE ? THEN 1
+                    WHEN m_art.string_value LIKE ? THEN 2
+                    ELSE 3 
+                END,
+                m_src.id ASC
             LIMIT ?
         """
-        cur.execute(sql, params)
+        # Order by params
+        q_order = f"%{query.strip()}%" if query and query.strip() else "%"
+        order_params = [q_order, q_order]
+        cur.execute(sql, params[:-1] + order_params + [params[-1]])
         results = []
         for row in cur.fetchall():
             results.append({
@@ -209,7 +232,7 @@ def sqlite_search_fallback(query: str, scope: str = "all", limit: int = 15) -> L
                 "category": row[2],
                 "org": row[3],
                 "content": row[4],
-                "score": 92.0
+                "score": 95.0 if query in (row[0] or '') else 88.0
             })
         conn.close()
         return results
@@ -218,17 +241,23 @@ def sqlite_search_fallback(query: str, scope: str = "all", limit: int = 15) -> L
         return []
 
 
-def search_documents(query: str, scope: str = "all", limit: int = 8) -> List[dict]:
+def search_documents(query: str, scope: str = "all", limit: int = 8, target_sources: Optional[List[str]] = None) -> List[dict]:
     """ChromaDB 내 법령 및 사내 등록 문서를 시맨틱 검색합니다.
     scope: 'all' | 'law' | 'custom' | 'ordinance'
+    target_sources: ['law', 'ordinance', 'custom'] 등 다중 소스 선택
     """
     vector_store = get_vector_store()
     if vector_store is None:
-        return sqlite_search_fallback(query, scope, limit)
+        return sqlite_search_fallback(query, scope, limit, target_sources)
 
     try:
         filter_dict = None
-        if scope in ["law", "custom", "ordinance"]:
+        if target_sources:
+            if len(target_sources) == 1:
+                filter_dict = {"source_type": target_sources[0]}
+            else:
+                filter_dict = {"source_type": {"$in": target_sources}}
+        elif scope in ["law", "custom", "ordinance"]:
             filter_dict = {"source_type": scope}
 
         # similarity_search_with_relevance_scores 수행
@@ -263,9 +292,9 @@ def search_documents(query: str, scope: str = "all", limit: int = 8) -> List[dic
 
         if not results and query:
             # 벡터 스코어 임계치로 필터링되어 비어있는 경우 SQLite 텍스트 검색으로 보완
-            return sqlite_search_fallback(query, scope, limit)
+            return sqlite_search_fallback(query, scope, limit, target_sources)
 
         return results
     except Exception as e:
         print(f"Error during document search, falling back to SQLite: {e}")
-        return sqlite_search_fallback(query, scope, limit)
+        return sqlite_search_fallback(query, scope, limit, target_sources)

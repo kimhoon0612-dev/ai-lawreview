@@ -170,6 +170,7 @@ async def upload_document(
     request: Request,
     files: Optional[List[UploadFile]] = File(None),
     file: Optional[UploadFile] = File(None),
+    sources: Optional[str] = Form(None),
     user: Optional[dict] = Depends(get_optional_user),
 ):
     all_files = []
@@ -180,6 +181,18 @@ async def upload_document(
 
     if not all_files:
         raise HTTPException(status_code=400, detail="업로드할 파일이 없습니다.")
+
+    # 사용자가 선택한 검토 기준 소스 파싱 (예: ["law", "ordinance", "custom"])
+    target_sources = None
+    if sources:
+        try:
+            import json
+            if sources.strip().startswith("["):
+                target_sources = json.loads(sources)
+            else:
+                target_sources = [s.strip() for s in sources.split(",") if s.strip()]
+        except Exception:
+            target_sources = ["law", "ordinance", "custom"]
 
     file_items = []
     total_size = 0
@@ -209,8 +222,8 @@ async def upload_document(
     if not extracted_text.strip():
         raise HTTPException(status_code=400, detail="문서에서 텍스트를 추출할 수 없거나 빈 문서입니다.")
 
-    # AI 검토 진행 (RAG 기반 독소조항 분석)
-    result = analyze_contract_text(extracted_text)
+    # AI 검토 진행 (선택된 소스 기반 RAG 독소조항 분석)
+    result = analyze_contract_text(extracted_text, target_sources=target_sources)
 
     if result.get("status") == "error":
          raise HTTPException(status_code=500, detail=result.get("message", "AI 분석 중 오류가 발생했습니다."))
