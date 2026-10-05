@@ -357,7 +357,7 @@ export default function Home() {
     setIsOrdinSearching(true);
     try {
       const q = keyword !== undefined ? keyword : (ordinQuery || (ordinTarget === 'cheonan_council' ? '천안시의회' : '천안시'));
-      const r = await fetch(`${API}/api/ordinances/live-search?query=${encodeURIComponent(q)}&display=20`);
+      const r = await fetch(`${API}/api/ordinances/live-search?query=${encodeURIComponent(q)}&display=50`);
       if (r.ok) {
         const data = await r.json();
         setOrdinResults(data.items || []);
@@ -1410,6 +1410,21 @@ export default function Home() {
 
             {/* Results List */}
             <div className="space-y-3">
+              {!isOrdinSearching && ordinResults.length > 0 && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1 pb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-800">
+                      자치법규 목록 <span className="text-sky-600 font-extrabold">{ordinResults.length}건</span>
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      (조례·규칙 문서 단위)
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-sky-800 bg-sky-50 border border-sky-200/80 px-2.5 py-1 rounded-lg">
+                    💡 조례 1건당 수십 개 조항(총 366개 조문)이 연동되어 있으며, <strong>[조문 전체보기]</strong>를 누르면 전체 조항이 열립니다.
+                  </div>
+                </div>
+              )}
               {isOrdinSearching ? (
                 <div className="bg-white rounded-2xl p-12 text-center border border-slate-200">
                   <ArrowPathIcon className="w-8 h-8 animate-spin text-sky-600 mx-auto mb-3" />

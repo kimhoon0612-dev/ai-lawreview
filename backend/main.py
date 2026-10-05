@@ -623,7 +623,7 @@ async def sync_ordinances():
 
 
 @app.get("/api/ordinances/live-search")
-async def live_search_ordinances(query: str = "천안시", display: int = 15):
+async def live_search_ordinances(query: str = "천안시", display: int = 50):
     """국가법령정보센터에서 자치법규 및 의회 정보를 실시간 검색합니다."""
     api_key = get_law_api_key()
     if not api_key:
