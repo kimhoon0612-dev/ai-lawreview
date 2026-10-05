@@ -101,8 +101,9 @@ class AuthRequest(BaseModel):
 
 class SearchRequest(BaseModel):
     query: str
-    scope: Optional[str] = "all"  # 'all' | 'law' | 'custom'
-    limit: Optional[int] = 8
+    scope: Optional[str] = "all"  # 'all' | 'law' | 'custom' | 'ordinance'
+    scopes: Optional[List[str]] = None  # ['law', 'ordinance', 'custom'] 다중 선택 지원
+    limit: Optional[int] = 12
 
 
 # ============================================================
@@ -321,19 +322,22 @@ async def summarize_endpoint(
 @app.post("/api/search")
 @limiter.limit("30/minute")
 async def search_endpoint(request: Request, body: SearchRequest):
-    """법령 DB 및 등록된 사내 참고자료를 시맨틱 통합 검색합니다."""
+    """법령 DB 및 등록된 사내 참고자료를 시맨틱 통합 검색합니다 (다중 소스 선택 지원)."""
     if not body.query or not body.query.strip():
         raise HTTPException(status_code=400, detail="검색어를 입력해 주세요.")
 
+    target_sources = body.scopes if body.scopes else None
     results = search_documents(
         query=body.query.strip(),
         scope=body.scope or "all",
-        limit=body.limit or 8
+        limit=body.limit or 15,
+        target_sources=target_sources
     )
 
     return {
         "query": body.query.strip(),
         "scope": body.scope or "all",
+        "scopes": target_sources,
         "total": len(results),
         "results": results
     }
@@ -341,20 +345,26 @@ async def search_endpoint(request: Request, body: SearchRequest):
 
 @app.get("/api/search")
 @limiter.limit("30/minute")
-async def search_get_endpoint(request: Request, q: str, scope: str = "all", limit: int = 8):
-    """GET 방식 시맨틱 검색 엔드포인트"""
+async def search_get_endpoint(request: Request, q: str, scope: str = "all", scopes: Optional[str] = None, limit: int = 15):
+    """GET 방식 시맨틱 검색 엔드포인트 (다중 소스 선택 지원)"""
     if not q or not q.strip():
         raise HTTPException(status_code=400, detail="검색어를 입력해 주세요.")
+
+    target_sources = None
+    if scopes:
+        target_sources = [s.strip() for s in scopes.split(",") if s.strip()]
 
     results = search_documents(
         query=q.strip(),
         scope=scope,
-        limit=limit
+        limit=limit,
+        target_sources=target_sources
     )
 
     return {
         "query": q.strip(),
         "scope": scope,
+        "scopes": target_sources,
         "total": len(results),
         "results": results
     }

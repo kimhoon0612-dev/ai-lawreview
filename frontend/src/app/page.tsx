@@ -23,7 +23,9 @@ import {
   ChevronUpIcon,
   XMarkIcon,
   BuildingLibraryIcon,
-  BuildingOffice2Icon
+  BuildingOffice2Icon,
+  DocumentCheckIcon,
+  FunnelIcon
 } from '@heroicons/react/24/outline';
 import AuthModal from './components/AuthModal';
 import DisclaimerBanner from './components/DisclaimerBanner';
@@ -33,9 +35,32 @@ import { API_BASE as API } from '../lib/api';
 
 type CustomDoc = { doc_id: string; doc_name: string; category: string; chunks_count: number; created_at: string };
 type User = { id: number; email: string; name: string };
-type TabType = 'review' | 'summarize' | 'search' | 'inspector' | 'ordinance' | 'history' | 'docs' | 'lawdb';
+type TabType = 'search' | 'national_law' | 'ordinance' | 'inspector' | 'review' | 'summarize' | 'docs' | 'history';
 
 const ALLOWED_EXTS = ['.pdf', '.docx', '.hwp', '.hwpx', '.png', '.jpg', '.jpeg', '.webp'];
+
+const DEFAULT_NATIONAL_LAWS = [
+  { name: '근로기준법', count: 136, org: '고용노동부', type: 'law', cat: 'labor', catName: '근로·노동', desc: '근로조건의 기준, 임금, 법정근로시간, 해고의 제한 및 퇴직금 규정' },
+  { name: '근로기준법 시행령', count: 80, org: '고용노동부', type: 'ordinance', cat: 'labor', catName: '근로·노동', desc: '근로기준법 위임사항, 연장·야간·휴일근로 가산수당 산정 세부기준' },
+  { name: '독점규제 및 공정거래에 관한 법률', count: 147, org: '공정거래위원회', type: 'law', cat: 'fair_trade', catName: '공정거래', desc: '시장지배적 지위남용 금지, 부당한 공동행위(담합) 및 불공정거래 규제' },
+  { name: '독점규제 및 공정거래에 관한 법률 시행령', count: 105, org: '공정거래위원회', type: 'ordinance', cat: 'fair_trade', catName: '공정거래', desc: '기업결합 신고, 지주회사 기준, 과징금 부과 및 감면 세부기준' },
+  { name: '하도급거래 공정화에 관한 법률', count: 69, org: '공정거래위원회', type: 'law', cat: 'fair_trade', catName: '공정거래·하도급', desc: '하도급 서면교부 의무, 부당한 대금결정·감액 금지, 대금 직접지급의무' },
+  { name: '하도급거래 공정화에 관한 법률 시행령', count: 39, org: '공정거래위원회', type: 'ordinance', cat: 'fair_trade', catName: '공정거래·하도급', desc: '하도급대금 연체이율, 계약이행보증, 법위반 과징금 산정기준' },
+  { name: '약관의 규제에 관한 법률', count: 49, org: '공정거래위원회', type: 'law', cat: 'consumer', catName: '소비자·약관', desc: '불공정 약관조항의 무효, 설명의무 위반, 고객에게 부당하게 불리한 조항 무효' },
+  { name: '약관의 규제에 관한 법률 시행령', count: 28, org: '공정거래위원회', type: 'ordinance', cat: 'consumer', catName: '소비자·약관', desc: '약관심사 청구 절차, 과태료 부과 및 시정명령 세부기준' },
+  { name: '전자상거래 등에서의 소비자보호에 관한 법률', count: 65, org: '공정거래위원회', type: 'law', cat: 'consumer', catName: '소비자·전자상거래', desc: '통신판매 신원표시, 7일 청약철회권 보장, 결제대금예치제(에스크로)' },
+  { name: '전자상거래 등에서의 소비자보호에 관한 법률 시행령', count: 64, org: '공정거래위원회', type: 'ordinance', cat: 'consumer', catName: '소비자·전자상거래', desc: '통신판매업 신고 면제기준, 청약철회 제한사유, 임시중지명령 절차' },
+  { name: '주택임대차보호법', count: 42, org: '법무부·국토교통부', type: 'law', cat: 'real_estate', catName: '부동산·임대차', desc: '주거용 건물 임대차 최단 존속기간 2년 보장, 대항력, 계약갱신요구권' },
+  { name: '주택임대차보호법 시행령', count: 35, org: '법무부·국토교통부', type: 'ordinance', cat: 'real_estate', catName: '부동산·임대차', desc: '최우선변제 소액보증금 범위, 월차임 전환산정률 기준' },
+  { name: '상가건물 임대차보호법', count: 33, org: '법무부·국토교통부', type: 'law', cat: 'real_estate', catName: '부동산·임대차', desc: '상가건물 10년 계약갱신요구권, 권리금 회수기회 보호, 대항력 규정' },
+  { name: '상가건물 임대차보호법 시행령', count: 24, org: '법무부·국토교통부', type: 'ordinance', cat: 'real_estate', catName: '부동산·임대차', desc: '상가보증금 적용범위 환산보증금 기준, 권리금 감정평가 세부기준' },
+  { name: '개인정보 보호법', count: 140, org: '개인정보보호위원회', type: 'law', cat: 'privacy', catName: '개인정보·보안', desc: '개인정보 수집·이용 동의원칙, 제3자 제공, 안전성 확보조치 및 과징금' },
+  { name: '개인정보 보호법 시행령', count: 152, org: '개인정보보호위원회', type: 'ordinance', cat: 'privacy', catName: '개인정보·보안', desc: '민감정보 및 고유식별정보 처리기준, 손해배상책임 보장 및 이행조치' },
+  { name: '난민법', count: 54, org: '법무부', type: 'law', cat: 'special', catName: '기타 특별법', desc: '난민인정 심사절차, 난민인정자의 처우 및 이의신청' },
+  { name: '난민법 시행령', count: 29, org: '법무부', type: 'ordinance', cat: 'special', catName: '기타 특별법', desc: '난민인정 신청서식, 생계비 등 지원기준' },
+  { name: '1980년해직공무원의보상등에관한특별조치법', count: 6, org: '행정안전부', type: 'law', cat: 'special', catName: '기타 특별법', desc: '1980년 부당 해직 공무원에 대한 명예회복 및 보상 조치' },
+  { name: '1980년해직공무원의보상등에관한특별조치법시행령', count: 13, org: '행정안전부', type: 'ordinance', cat: 'special', catName: '기타 특별법', desc: '보상금 지급신청 절차 및 보상심의위원회 구성' },
+];
 
 const SAMPLE_CUSTOM_DOCS = [
   {
@@ -55,7 +80,7 @@ const SAMPLE_CUSTOM_DOCS = [
 ];
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<TabType>('review');
+  const [activeTab, setActiveTab] = useState<TabType>('search');
 
   // Review Criteria Selection State (국가법령, 천안시 조례, 사내 참고자료)
   const [reviewSources, setReviewSources] = useState<{
@@ -85,13 +110,25 @@ export default function Home() {
   const [copyToast, setCopyToast] = useState(false);
   const sumFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Search State
+  // Search State (Multi-Scope Selection)
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchScope, setSearchScope] = useState<'all' | 'law' | 'ordinance' | 'custom'>('all');
+  const [searchScopes, setSearchScopes] = useState<{
+    law: boolean;
+    ordinance: boolean;
+    custom: boolean;
+  }>({
+    law: true,
+    ordinance: true,
+    custom: true,
+  });
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searchTotal, setSearchTotal] = useState(0);
   const [searchSearched, setSearchSearched] = useState(false);
+
+  // National Law Directory State
+  const [nationalLawFilter, setNationalLawFilter] = useState('');
+  const [nationalLawCategory, setNationalLawCategory] = useState<string>('all');
 
   // Laws Catalog & Multi-Layout Reader State
   const [lawsCatalog, setLawsCatalog] = useState<{ national: any[]; ordinance: any[]; total_laws: number; total_articles: number } | null>(null);
@@ -306,11 +343,38 @@ export default function Home() {
     setTimeout(() => setCopyToast(false), 2500);
   };
 
-  // Search Action
-  const handleSearch = async (overrideQuery?: string, overrideScope?: 'all' | 'law' | 'ordinance' | 'custom') => {
+  const isAllSearchScopes = searchScopes.law && searchScopes.ordinance && searchScopes.custom;
+
+  const toggleAllSearchScopes = () => {
+    if (isAllSearchScopes) {
+      setSearchScopes({ law: false, ordinance: false, custom: false });
+    } else {
+      setSearchScopes({ law: true, ordinance: true, custom: true });
+    }
+  };
+
+  const toggleSearchScope = (scopeKey: 'law' | 'ordinance' | 'custom') => {
+    setSearchScopes(prev => ({ ...prev, [scopeKey]: !prev[scopeKey] }));
+  };
+
+  // Search Action (Multi-Scope RAG vector query)
+  const handleSearch = async (
+    overrideQuery?: string,
+    overrideScopes?: { law: boolean; ordinance: boolean; custom: boolean }
+  ) => {
     const q = overrideQuery !== undefined ? overrideQuery : searchQuery;
-    const s = overrideScope !== undefined ? overrideScope : searchScope;
+    const scopesObj = overrideScopes !== undefined ? overrideScopes : searchScopes;
     if (!q.trim()) return;
+
+    const activeScopes: string[] = [];
+    if (scopesObj.law) activeScopes.push('law');
+    if (scopesObj.ordinance) activeScopes.push('ordinance');
+    if (scopesObj.custom) activeScopes.push('custom');
+
+    if (activeScopes.length === 0) {
+      alert('검색 대상을 최소 1개 이상 선택해 주세요.');
+      return;
+    }
 
     setIsSearching(true);
     setSearchSearched(true);
@@ -319,7 +383,12 @@ export default function Home() {
       const r = await fetch(`${API}/api/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q.trim(), scope: s, limit: 12 }),
+        body: JSON.stringify({
+          query: q.trim(),
+          scope: activeScopes.length === 3 ? 'all' : (activeScopes.length === 1 ? activeScopes[0] : 'all'),
+          scopes: activeScopes,
+          limit: 15,
+        }),
       });
       if (!r.ok) throw new Error();
       const d = await r.json();
@@ -495,8 +564,10 @@ export default function Home() {
   };
 
   useEffect(() => {
-    if (activeTab === 'lawdb' || activeTab === 'ordinance') fetchLaw();
-    if (activeTab === 'search' || activeTab === 'inspector') fetchLawsCatalog();
+    if (activeTab === 'ordinance' || activeTab === 'national_law') fetchLaw();
+    if (activeTab === 'search' || activeTab === 'inspector' || activeTab === 'national_law') {
+      if (!lawsCatalog) fetchLawsCatalog();
+    }
     if (activeTab === 'ordinance' && ordinResults.length === 0) fetchOrdinances('천안시');
   }, [activeTab]);
 
@@ -510,14 +581,14 @@ export default function Home() {
   };
 
   const tabs = [
-    { id: 'review' as const, label: '계약서 검토', icon: <ScaleIcon className="w-4 h-4" /> },
-    { id: 'summarize' as const, label: '문서 요약', icon: <SparklesIcon className="w-4 h-4 text-amber-300" /> },
     { id: 'search' as const, label: '통합 검색', icon: <MagnifyingGlassIcon className="w-4 h-4 text-emerald-300" /> },
-    { id: 'inspector' as const, label: '법령·조례 대조열람', icon: <BuildingOffice2Icon className="w-4 h-4 text-indigo-300" /> },
+    { id: 'national_law' as const, label: '대한민국 법령', icon: <ScaleIcon className="w-4 h-4 text-amber-300" /> },
     { id: 'ordinance' as const, label: '지자체 조례·의회', icon: <BuildingLibraryIcon className="w-4 h-4 text-sky-400" /> },
+    { id: 'inspector' as const, label: '2단·3단 비교 대조', icon: <BuildingOffice2Icon className="w-4 h-4 text-indigo-300" /> },
+    { id: 'review' as const, label: '계약서 AI 검토', icon: <DocumentCheckIcon className="w-4 h-4 text-blue-300" /> },
+    { id: 'summarize' as const, label: '문서 요약', icon: <SparklesIcon className="w-4 h-4 text-purple-300" /> },
     { id: 'docs' as const, label: '사내 참고자료', icon: <FolderPlusIcon className="w-4 h-4" /> },
     { id: 'history' as const, label: '분석 이력', icon: <ClockIcon className="w-4 h-4" /> },
-    { id: 'lawdb' as const, label: '법령 DB', icon: <ServerStackIcon className="w-4 h-4" /> },
   ];
 
   return (
@@ -1348,30 +1419,93 @@ export default function Home() {
                 </button>
               </form>
 
-              {/* Scope Chips */}
+              {/* Scope Multi-Select Chips */}
               <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 text-xs">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-slate-400 font-medium">검색 대상:</span>
-                  {[
-                    { id: 'all' as const, label: '🌐 전체 자료' },
-                    { id: 'law' as const, label: '⚖️ 대한민국 법령' },
-                    { id: 'ordinance' as const, label: '🏛️ 지자체 조례(천안시)' },
-                    { id: 'custom' as const, label: '🏢 사내 참고자료' },
-                  ].map(s => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => {
-                        setSearchScope(s.id);
-                        if (searchQuery.trim()) handleSearch(searchQuery, s.id);
-                      }}
-                      className={`px-3 py-1 rounded-full font-semibold transition-all ${
-                        searchScope === s.id ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  <span className="text-slate-500 font-semibold flex items-center gap-1">
+                    <FunnelIcon className="w-3.5 h-3.5 text-slate-400" />
+                    검색 대상:
+                  </span>
+
+                  {/* All Scopes Toggle */}
+                  <button
+                    type="button"
+                    onClick={toggleAllSearchScopes}
+                    className={`px-3 py-1.5 rounded-full font-bold transition-all flex items-center gap-1.5 border cursor-pointer ${
+                      isAllSearchScopes
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span
+                      className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] ${
+                        isAllSearchScopes ? 'bg-emerald-500 text-white font-extrabold' : 'border border-slate-300'
                       }`}
                     >
-                      {s.label}
-                    </button>
-                  ))}
+                      {isAllSearchScopes ? '✓' : ''}
+                    </span>
+                    <span>전체 자료</span>
+                  </button>
+
+                  {/* Law Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => toggleSearchScope('law')}
+                    className={`px-3 py-1.5 rounded-full font-bold transition-all flex items-center gap-1.5 border cursor-pointer ${
+                      searchScopes.law
+                        ? 'bg-amber-50 text-amber-900 border-amber-300 shadow-sm ring-1 ring-amber-300'
+                        : 'bg-white text-slate-400 border-slate-200 hover:text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span
+                      className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] ${
+                        searchScopes.law ? 'bg-amber-600 text-white font-extrabold' : 'border border-slate-300'
+                      }`}
+                    >
+                      {searchScopes.law ? '✓' : ''}
+                    </span>
+                    <span>⚖️ 대한민국 법령 (1,310조)</span>
+                  </button>
+
+                  {/* Ordinance Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => toggleSearchScope('ordinance')}
+                    className={`px-3 py-1.5 rounded-full font-bold transition-all flex items-center gap-1.5 border cursor-pointer ${
+                      searchScopes.ordinance
+                        ? 'bg-sky-50 text-sky-900 border-sky-300 shadow-sm ring-1 ring-sky-300'
+                        : 'bg-white text-slate-400 border-slate-200 hover:text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span
+                      className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] ${
+                        searchScopes.ordinance ? 'bg-sky-600 text-white font-extrabold' : 'border border-slate-300'
+                      }`}
+                    >
+                      {searchScopes.ordinance ? '✓' : ''}
+                    </span>
+                    <span>🏛️ 천안시 조례·의회 (366조)</span>
+                  </button>
+
+                  {/* Custom Docs Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => toggleSearchScope('custom')}
+                    className={`px-3 py-1.5 rounded-full font-bold transition-all flex items-center gap-1.5 border cursor-pointer ${
+                      searchScopes.custom
+                        ? 'bg-purple-50 text-purple-900 border-purple-300 shadow-sm ring-1 ring-purple-300'
+                        : 'bg-white text-slate-400 border-slate-200 hover:text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span
+                      className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] ${
+                        searchScopes.custom ? 'bg-purple-600 text-white font-extrabold' : 'border border-slate-300'
+                      }`}
+                    >
+                      {searchScopes.custom ? '✓' : ''}
+                    </span>
+                    <span>🏢 사내 참고자료 & 규정</span>
+                  </button>
                 </div>
 
                 {/* Quick Queries */}
@@ -1383,9 +1517,9 @@ export default function Home() {
                       type="button"
                       onClick={() => {
                         setSearchQuery(q);
-                        handleSearch(q, searchScope);
+                        handleSearch(q, searchScopes);
                       }}
-                      className="px-2 py-0.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 rounded text-[11px] transition-colors"
+                      className="px-2 py-0.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 rounded text-[11px] transition-colors cursor-pointer"
                     >
                       {q}
                     </button>
@@ -1438,7 +1572,7 @@ export default function Home() {
                                 관련도 {score}%
                               </span>
                               <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold">
-                                {r.source_type === 'law' ? '⚖️ 법령' : `🏢 ${catLabels[r.category] || '사내 자료'}`}
+                                {r.source_type === 'ordinance' ? '🏛️ 천안시 조례' : r.source_type === 'law' ? '⚖️ 대한민국 법령' : `🏢 ${catLabels[r.category] || '사내 참고자료'}`}
                               </span>
                             </div>
                             <div className="flex items-center gap-2">
@@ -1489,18 +1623,262 @@ export default function Home() {
         )}
 
         {/* ============================================================ */}
-        {/* Tab 4: Inspector (법령·조례 대조열람실 - 1단/2단/3단 멀티뷰) */}
+        {/* Tab: National Law Directory (대한민국 국가법령 전용 게시판) */}
+        {/* ============================================================ */}
+        {activeTab === 'national_law' && (
+          <div className="animate-fade-in-up">
+            {/* Header */}
+            <div className="text-center mb-8">
+              <span className="text-xs uppercase font-bold tracking-wider text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-200">
+                Republic of Korea National Laws (대한민국 실무 핵심 법령)
+              </span>
+              <h2 className="text-3xl font-extrabold text-slate-800 mt-2 mb-2">대한민국 국가법령 디렉토리</h2>
+              <p className="text-slate-600 text-sm max-w-2xl mx-auto">
+                근로기준법, 하도급거래공정화법, 개인정보보호법, 임대차보호법 등 실무 핵심 법률과 시행령 전문(총 1,310개 조문)을 분야별로 분류하여 신속하게 열람하고 검색합니다.
+              </p>
+            </div>
+
+            {/* Top Stats Banner */}
+            <div className="bg-gradient-to-r from-amber-950 via-slate-900 to-amber-900 text-white rounded-2xl p-6 mb-6 shadow-md border border-amber-800/60">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                    <span className="bg-amber-500/20 text-amber-300 text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-amber-400/30">
+                      국가법령 ChromaDB 벡터 연동
+                    </span>
+                    <span className="text-xs text-slate-300">
+                      수록 현황: <strong className="text-amber-300">20개 핵심 법령·시행령</strong> (총 1,310개 조문)
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-bold text-white">대한민국 상위법령 분야별 분류 & 전문 열람실</h3>
+                  <p className="text-xs text-amber-200/80 mt-1">
+                    조항 번호 검색, 실무 해설 및 [전문 열람] 버튼을 통해 제1조부터 전체 본문을 즉시 확인할 수 있습니다.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => {
+                      setLayoutMode('2col');
+                      setLeftSource('law');
+                      setRightSource('ordinance');
+                      setActiveTab('inspector');
+                    }}
+                    className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition shadow-sm cursor-pointer"
+                  >
+                    <BuildingOffice2Icon className="w-4 h-4" />
+                    2단 대조실에서 조례와 비교하기
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Category Filter & Search Bar */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mb-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-4 border-b border-slate-100">
+                {/* Category Pills */}
+                <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                  <span className="font-bold text-slate-700 mr-1 flex items-center gap-1">
+                    <FunnelIcon className="w-3.5 h-3.5 text-slate-400" />
+                    분야 필터:
+                  </span>
+                  {[
+                    { id: 'all', label: '전체 (20)' },
+                    { id: 'labor', label: '👷 근로·노동' },
+                    { id: 'fair_trade', label: '🤝 공정거래·하도급' },
+                    { id: 'consumer', label: '🛒 소비자·약관' },
+                    { id: 'real_estate', label: '🏢 부동산·임대차' },
+                    { id: 'privacy', label: '🔒 개인정보·보안' },
+                    { id: 'special', label: '📜 기타 특별법' },
+                  ].map(cat => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setNationalLawCategory(cat.id)}
+                      className={`px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer ${
+                        nationalLawCategory === cat.id
+                          ? 'bg-amber-600 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Instant Law Search Input */}
+                <div className="relative w-full sm:w-72">
+                  <MagnifyingGlassIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={nationalLawFilter}
+                    onChange={e => setNationalLawFilter(e.target.value)}
+                    placeholder="법령명, 소관부처, 조항 검색..."
+                    className="w-full pl-9 pr-7 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-amber-500 focus:bg-white transition"
+                  />
+                  {nationalLawFilter && (
+                    <button
+                      onClick={() => setNationalLawFilter('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* National Laws List Cards */}
+              {(() => {
+                const sourceList = (lawsCatalog?.national && lawsCatalog.national.length > 0)
+                  ? lawsCatalog.national.map(item => {
+                      const found = DEFAULT_NATIONAL_LAWS.find(d => d.name === item.name);
+                      return {
+                        name: item.name,
+                        count: item.count || found?.count || 0,
+                        org: item.org || found?.org || '대한민국',
+                        type: item.type || found?.type || 'law',
+                        cat: found?.cat || 'special',
+                        catName: found?.catName || '기타',
+                        desc: found?.desc || '대한민국 주요 법률 규정'
+                      };
+                    })
+                  : DEFAULT_NATIONAL_LAWS;
+
+                let filtered = sourceList;
+                if (nationalLawCategory !== 'all') {
+                  filtered = filtered.filter(l => l.cat === nationalLawCategory);
+                }
+                if (nationalLawFilter.trim()) {
+                  const kw = nationalLawFilter.toLowerCase();
+                  filtered = filtered.filter(l =>
+                    l.name.toLowerCase().includes(kw) ||
+                    l.org.toLowerCase().includes(kw) ||
+                    l.desc.toLowerCase().includes(kw) ||
+                    l.catName.toLowerCase().includes(kw)
+                  );
+                }
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="py-12 text-center text-slate-500 text-xs">
+                      <p className="font-semibold text-slate-700 mb-1">검색 조건과 일치하는 국가법령이 없습니다.</p>
+                      <button
+                        onClick={() => { setNationalLawCategory('all'); setNationalLawFilter(''); }}
+                        className="text-amber-600 hover:underline mt-2 inline-block font-semibold"
+                      >
+                        필터 초기화
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {filtered.map((law, idx) => {
+                      const isDecree = law.name.includes('시행령');
+                      return (
+                        <div
+                          key={idx}
+                          className="p-5 rounded-2xl border border-slate-200 bg-white hover:border-amber-400 hover:shadow-md transition-all flex flex-col justify-between group"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${isDecree ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-900'}`}>
+                                  {isDecree ? '대통령령(시행령)' : '법률(상위법)'}
+                                </span>
+                                <span className="text-[11px] font-medium text-slate-500">
+                                  {law.org}
+                                </span>
+                              </div>
+                              <span className="text-xs font-extrabold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                                {law.count}개 조문
+                              </span>
+                            </div>
+
+                            <h4 className="font-extrabold text-slate-900 text-base mb-1.5 group-hover:text-amber-700 transition">
+                              {law.name}
+                            </h4>
+
+                            <p className="text-xs text-slate-600 leading-relaxed mb-4">
+                              {law.desc}
+                            </p>
+                          </div>
+
+                          <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
+                            <span className="text-[11px] font-semibold text-slate-400">
+                              분야: <span className="text-slate-600">{law.catName}</span>
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => openLawFullText(law.name)}
+                                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg transition flex items-center gap-1 shadow-sm cursor-pointer"
+                              >
+                                <DocumentTextIcon className="w-3.5 h-3.5" />
+                                전문 열람 ↗
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setLayoutMode('2col');
+                                  setLeftSource('law');
+                                  setRightSource('ordinance');
+                                  setActiveTab('inspector');
+                                }}
+                                title="2단 대조실에서 조례 및 사내규정과 비교"
+                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition flex items-center gap-1 cursor-pointer"
+                              >
+                                대조실 ↗
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* Tab 4: Inspector (2단·3단 멀티 비교 대조실)                   */}
         {/* ============================================================ */}
         {activeTab === 'inspector' && (
           <div className="animate-fade-in-up">
             <div className="text-center mb-6">
               <span className="text-xs uppercase font-bold tracking-wider text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-200">
-                1단 · 2단 · 3단 멀티 레이아웃 대조실
+                1단 · 2단 · 3단 멀티 레이아웃 비교 대조실
               </span>
-              <h2 className="text-3xl font-extrabold text-slate-800 mt-2 mb-2">국가법령 · 천안시 조례 · 사내규정 대조 열람</h2>
+              <h2 className="text-3xl font-extrabold text-slate-800 mt-2 mb-2">국가법령 · 천안시 조례 · 사내규정 비교 대조</h2>
               <p className="text-slate-600 max-w-xl mx-auto text-sm leading-relaxed">
                 원하는 단수(1단/2단/3단)를 선택하여 상위법령과 지자체 조례, 사내 참고자료를 나란히 대조하고 제1조부터 전체 전문을 확인하세요.
               </p>
+            </div>
+
+            {/* Guidance: Difference Between Search and Inspector */}
+            <div className="bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-50 border border-indigo-200/90 rounded-2xl p-5 mb-6 shadow-sm">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-md shadow-indigo-500/20">
+                    <BuildingOffice2Icon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-indigo-950 text-sm flex items-center gap-2">
+                      <span>💡 '통합 검색'과 '2단·3단 비교 대조'의 차이점</span>
+                    </h4>
+                    <div className="text-xs text-slate-700 mt-1 space-y-1 leading-relaxed">
+                      <p>
+                        <strong className="text-emerald-700">🔍 통합 검색:</strong> 키워드를 입력하여 법령·천안시 조례·사내규정 전체에서 <strong>관련 조문만 핀포인트로 발췌</strong>하여 찾아주는 시맨틱 검색 엔진입니다.
+                      </p>
+                      <p>
+                        <strong className="text-indigo-700">▥ 2단·3단 비교 대조실:</strong> 국가법령(상위법), 천안시 조례(지자체 규범), 사내 지침을 <strong>화면에 나란히 펼쳐놓고 제1조부터 전문을 조문별로 1:1 대조</strong>하여 법률 위반 및 상충 조항을 정밀 검토하는 전문 대조 뷰어입니다.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -2365,94 +2743,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* ============================================================ */}
-        {/* Tab 6: Law DB (법령 DB 동기화)                               */}
-        {/* ============================================================ */}
-        {activeTab === 'lawdb' && (
-          <div className="animate-fade-in-up">
-            <div className="text-center mb-8">
-              <span className="text-xs uppercase font-bold tracking-wider text-slate-600 bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
-                National Law Vector Storage
-              </span>
-              <h2 className="text-3xl font-extrabold text-slate-800 mt-2 mb-2">법령 DB 관리</h2>
-              <p className="text-slate-600 text-sm">국가법령정보센터 Open API를 통해 최신 대한민국 법령을 벡터 데이터베이스에 동기화합니다.</p>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-                <div className="flex items-center gap-2 mb-1">
-                  <ScaleIcon className="w-5 h-5 text-blue-500" />
-                  <span className="text-xs text-slate-500">국가 법령 조문</span>
-                </div>
-                <p className="text-2xl font-bold">
-                  {lawStatus?.law_count ?? '—'}
-                  <span className="text-xs font-normal text-slate-500 ml-1">개 조문</span>
-                </p>
-              </div>
-
-              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-                <div className="flex items-center gap-2 mb-1">
-                  <BuildingLibraryIcon className="w-5 h-5 text-sky-500" />
-                  <span className="text-xs text-slate-500">천안시 조례·의회</span>
-                </div>
-                <p className="text-2xl font-bold">
-                  {lawStatus?.ordinance_count ?? 366}
-                  <span className="text-xs font-normal text-slate-500 ml-1">개 조문</span>
-                </p>
-              </div>
-
-              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-                <div className="flex items-center gap-2 mb-1">
-                  <FolderPlusIcon className="w-5 h-5 text-indigo-500" />
-                  <span className="text-xs text-slate-500">사내 참고자료 청크</span>
-                </div>
-                <p className="text-2xl font-bold">
-                  {lawStatus?.custom_count ?? '—'}
-                  <span className="text-xs font-normal text-slate-500 ml-1">개 청크</span>
-                </p>
-              </div>
-
-              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-                <div className="flex items-center gap-2 mb-1">
-                  <ServerStackIcon className="w-5 h-5 text-emerald-500" />
-                  <span className="text-xs text-slate-500">국가법령 API 상태</span>
-                </div>
-                <p className="text-base font-bold mt-1">
-                  {lawStatus?.has_api_key ? (
-                    <span className="text-emerald-600 font-semibold">✓ Open API 연동됨</span>
-                  ) : (
-                    <span className="text-amber-600 font-semibold">내장 샘플 모드</span>
-                  )}
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
-              <h3 className="text-base font-bold text-slate-800 mb-2 flex items-center gap-2">
-                <CloudArrowDownIcon className="w-5 h-5 text-blue-600" />법령 데이터 동기화
-              </h3>
-              <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-                {lawStatus?.has_api_key
-                  ? 'Open API를 통해 근로기준법, 민법, 상법, 하도급법, 약관규제법 등 주요 10개 법령을 자동 갱신합니다.'
-                  : 'API 키 없이도 기본 제공되는 핵심 20개 법령 조문(근로기준법, 민법, 하도급법, 약관규제법 등)으로 동기화합니다.'}
-              </p>
-              <button onClick={syncLaw} disabled={isSyncing} className="auth-btn max-w-xs">
-                {isSyncing ? '동기화 진행 중...' : '법령 동기화 시작'}
-              </button>
-              {syncResult && (
-                <div
-                  className={`mt-4 p-4 rounded-xl text-xs border leading-relaxed ${
-                    syncResult.status === 'error'
-                      ? 'bg-red-50 text-red-800 border-red-200'
-                      : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                  }`}
-                >
-                  <strong>{syncResult.status === 'error' ? '오류:' : '완료!'}</strong> {syncResult.message}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
 
       <ChatWidget />
