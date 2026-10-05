@@ -728,17 +728,16 @@ async def get_law_full_text_endpoint(source_name: str):
         sql = """
             SELECT 
                 COALESCE(m_art.string_value, '') AS article,
-                fts.string_value AS content,
+                COALESCE(m_doc.string_value, '') AS content,
                 COALESCE(m_org.string_value, '') AS org
             FROM embedding_metadata m_src
             LEFT JOIN embedding_metadata m_art ON m_src.id = m_art.id AND m_art.key = 'article'
+            LEFT JOIN embedding_metadata m_doc ON m_src.id = m_doc.id AND m_doc.key = 'chroma:document'
             LEFT JOIN embedding_metadata m_org ON m_src.id = m_org.id AND m_org.key = 'org'
-            JOIN embeddings e ON m_src.id = e.id
-            JOIN embedding_fulltext_search fts ON fts.rowid = e.seq_id
-            WHERE m_src.key = 'source' AND m_src.string_value = ?
-            ORDER BY e.seq_id ASC
+            WHERE m_src.key = 'source' AND (m_src.string_value = ? OR m_src.string_value LIKE ?)
+            ORDER BY m_src.id ASC
         """
-        cur.execute(sql, (source_name,))
+        cur.execute(sql, (source_name.strip(), f"%{source_name.strip()}%"))
         articles = []
         org_name = ""
         for art, content, org in cur.fetchall():

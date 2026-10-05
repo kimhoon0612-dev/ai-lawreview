@@ -37,6 +37,23 @@ type TabType = 'review' | 'summarize' | 'search' | 'ordinance' | 'history' | 'do
 
 const ALLOWED_EXTS = ['.pdf', '.docx', '.hwp', '.hwpx', '.png', '.jpg', '.jpeg', '.webp'];
 
+const SAMPLE_CUSTOM_DOCS = [
+  {
+    id: 9991,
+    name: '사내 표준 용역외주계약 관리지침',
+    category: 'company_rule',
+    chunk_count: 8,
+    content: '제1조(목적) 본 지침은 당사의 외주 용역계약 체결 시 불공정 독소조항을 방지하고 하도급법 및 상위 법령을 준수함을 목적으로 한다.\n\n제4조(위약금의 한도) 계약 불이행에 따른 위약벌 및 손해배상 예정액은 총 계약금액의 10%를 초과할 수 없으며, 과도한 위약벌 조항은 무효로 한다.\n\n제7조(대금 지급) 검수 완료일로부터 14일 이내에 현금 또는 계좌이체로 지급하여야 하며, 부당한 대금 감액은 엄격히 금지된다.\n\n제10조(비밀유지) 계약 종료 후 2년간 영업비밀을 보호하며, 비밀유지 의무 위반 시 실손해액을 기준으로 배상한다.',
+  },
+  {
+    id: 9992,
+    name: '사내 취업규칙 복무 및 퇴직 관리규정',
+    category: 'company_rule',
+    chunk_count: 12,
+    content: '제1조(목적) 본 규정은 임직원의 근로조건과 복무에 관한 기본 사항을 정함을 목적으로 한다.\n\n제15조(해고 및 예고) 회사는 정당한 사유 없이 직원을 해고할 수 없으며, 30일 전에 해고를 예고하거나 30일분의 통상임금을 지급한다.\n\n제22조(퇴직금 지급) 계속근로연수 1년에 대하여 30일분의 평균임금을 퇴직일로부터 14일 이내에 지급한다.\n\n제28조(연차유급휴가) 근로기준법에 따라 1년간 80퍼센트 이상 출근한 근로자에게 15일의 유급휴가를 부여한다.',
+  },
+];
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>('review');
 
@@ -65,15 +82,21 @@ export default function Home() {
   const [searchTotal, setSearchTotal] = useState(0);
   const [searchSearched, setSearchSearched] = useState(false);
 
-  // Laws Catalog & Full-Text Reader State
+  // Laws Catalog & Multi-Layout Reader State
   const [lawsCatalog, setLawsCatalog] = useState<{ national: any[]; ordinance: any[]; total_laws: number; total_articles: number } | null>(null);
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
-  const [catalogCategory, setCatalogCategory] = useState<'all' | 'national' | 'ordinance'>('all');
-  const [catalogFilter, setCatalogFilter] = useState('');
   const [selectedLawFull, setSelectedLawFull] = useState<{ source_name: string; org: string; total: number; articles: any[] } | null>(null);
   const [isLoadingFullText, setIsLoadingFullText] = useState(false);
   const [inLawFilter, setInLawFilter] = useState('');
   const [viewMode, setViewMode] = useState<'catalog' | 'search'>('catalog');
+
+  // Multi-Layout State (1단 / 2단 / 3단 가변 뷰)
+  const [layoutMode, setLayoutMode] = useState<'1col' | '2col' | '3col'>('3col');
+  const [singleSource, setSingleSource] = useState<'law' | 'ordinance' | 'custom'>('law');
+  const [leftSource, setLeftSource] = useState<'law' | 'ordinance' | 'custom'>('law');
+  const [rightSource, setRightSource] = useState<'law' | 'ordinance' | 'custom'>('ordinance');
+  const [columnSearchQuery, setColumnSearchQuery] = useState('');
+  const [selectedCustomDoc, setSelectedCustomDoc] = useState<any | null>(null);
 
   // Ordinance Tab State (충청남도 천안시 & 천안시의회 자치법규)
   const [ordinQuery, setOrdinQuery] = useState('');
@@ -1263,122 +1286,308 @@ export default function Home() {
               </span>
             </div>
 
-            {/* Mode 1: Laws Catalog (전체 법령 및 자치법규 목차) */}
+            {/* Mode 1: Laws & Ordinances & Internal Rules Multi-Layout Inspector */}
             {viewMode === 'catalog' && (
               <div className="space-y-4">
-                {/* Catalog Filter Controls */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                  <div className="flex items-center gap-1.5 flex-wrap">
+                {/* Multi-Layout Toolbar */}
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  {/* Left: Layout Mode Buttons */}
+                  <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl w-fit">
                     <button
-                      onClick={() => setCatalogCategory('all')}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                        catalogCategory === 'all'
-                          ? 'bg-slate-900 text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      type="button"
+                      onClick={() => setLayoutMode('1col')}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        layoutMode === '1col'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900'
                       }`}
+                      title="1개 영역에 집중하여 넓게 열람"
                     >
-                      전체 ({lawsCatalog?.total_laws ?? 41})
+                      <span className="font-mono text-sm">▤</span> 1단 집중 뷰
                     </button>
                     <button
-                      onClick={() => setCatalogCategory('national')}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                        catalogCategory === 'national'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      type="button"
+                      onClick={() => setLayoutMode('2col')}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        layoutMode === '2col'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="2개 영역을 나란히 선택 비교"
+                    >
+                      <span className="font-mono text-sm">▥</span> 2단 분할 비교
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLayoutMode('3col')}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        layoutMode === '3col'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="국가법령 - 천안시조례 - 사내규정 3자 동시 대조"
+                    >
+                      <span className="font-mono text-sm">☱</span> 3단 종합 대조
+                    </button>
+                  </div>
+
+                  {/* Right: Unified Multi-Column Instant Filter */}
+                  <div className="relative flex-1 max-w-md">
+                    <MagnifyingGlassIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={columnSearchQuery}
+                      onChange={e => setColumnSearchQuery(e.target.value)}
+                      placeholder="활성화된 화면 전체 동시 필터링 (예: 하도급, 소상공인, 지원, 해고)..."
+                      className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 focus:bg-white transition"
+                    />
+                    {columnSearchQuery && (
+                      <button
+                        onClick={() => setColumnSearchQuery('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 1-Column Single View Source Selector */}
+                {layoutMode === '1col' && (
+                  <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-2xl border border-slate-200 shadow-sm flex-wrap">
+                    <span className="text-xs font-bold text-slate-500 mr-1">열람 대상 선택:</span>
+                    <button
+                      onClick={() => setSingleSource('law')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                        singleSource === 'law' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
                       ⚖️ 대한민국 국가 법령 ({lawsCatalog?.national.length ?? 18})
                     </button>
                     <button
-                      onClick={() => setCatalogCategory('ordinance')}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                        catalogCategory === 'ordinance'
-                          ? 'bg-sky-600 text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      onClick={() => setSingleSource('ordinance')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                        singleSource === 'ordinance' ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
                       🏛️ 천안시 자치법규 ({lawsCatalog?.ordinance.length ?? 23})
                     </button>
+                    <button
+                      onClick={() => setSingleSource('custom')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                        singleSource === 'custom' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      🏢 사내 참고자료 & 지침 ({customDocs.length || SAMPLE_CUSTOM_DOCS.length})
+                    </button>
                   </div>
+                )}
 
-                  <div className="relative">
-                    <MagnifyingGlassIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={catalogFilter}
-                      onChange={e => setCatalogFilter(e.target.value)}
-                      placeholder="법령명 빠른 검색 (예: 근로, 소상공인, 하도급)..."
-                      className="pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 w-full sm:w-64"
-                    />
-                  </div>
-                </div>
-
-                {/* Catalog Grid Cards */}
+                {/* Columns Container */}
                 {isLoadingCatalog ? (
                   <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
                     <ArrowPathIcon className="w-8 h-8 animate-spin text-emerald-600 mx-auto mb-3" />
-                    <p className="text-sm font-semibold text-slate-700">법령 목차를 불러오는 중입니다...</p>
+                    <p className="text-sm font-semibold text-slate-700">법령 및 자치법규 데이터를 불러오는 중입니다...</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                  <div>
+                    {/* Helper to render a data column */}
                     {(() => {
-                      let items = [];
-                      if (catalogCategory === 'all' || catalogCategory === 'national') {
-                        items.push(...(lawsCatalog?.national || []));
-                      }
-                      if (catalogCategory === 'all' || catalogCategory === 'ordinance') {
-                        items.push(...(lawsCatalog?.ordinance || []));
-                      }
-                      if (catalogFilter.trim()) {
-                        const kw = catalogFilter.toLowerCase();
-                        items = items.filter(it => it.name.toLowerCase().includes(kw));
-                      }
+                      const renderDataColumn = (
+                        src: 'law' | 'ordinance' | 'custom',
+                        canChange?: boolean,
+                        onChange?: (next: 'law' | 'ordinance' | 'custom') => void
+                      ) => {
+                        const isLaw = src === 'law';
+                        const isOrdin = src === 'ordinance';
+                        const isCustom = src === 'custom';
 
-                      if (items.length === 0) {
-                        return (
-                          <div className="col-span-full py-12 text-center bg-white rounded-2xl border border-slate-200 text-slate-500 text-xs">
-                            일치하는 법령이 없습니다.
-                          </div>
-                        );
-                      }
+                        const title = isLaw
+                          ? '⚖️ 대한민국 국가 법령'
+                          : isOrdin
+                          ? '🏛️ 충남 천안시 자치법규'
+                          : '🏢 사내 참고자료 & 규정';
 
-                      return items.map((law, idx) => {
-                        const isOrdin = law.type === 'ordinance';
+                        const subtitle = isLaw
+                          ? '상위법 기준 · 18개 법률 (1,310조)'
+                          : isOrdin
+                          ? '지자체 조례·규칙 · 23개 조례 (366조)'
+                          : '회사 내부 규범 기준 · 취업규칙/용역지침';
+
+                        const headerTheme = isLaw
+                          ? 'bg-blue-50/90 border-blue-200 text-blue-900'
+                          : isOrdin
+                          ? 'bg-sky-50/90 border-sky-200 text-sky-900'
+                          : 'bg-indigo-50/90 border-indigo-200 text-indigo-900';
+
+                        let rawItems: any[] = [];
+                        if (isLaw) rawItems = lawsCatalog?.national || [];
+                        else if (isOrdin) rawItems = lawsCatalog?.ordinance || [];
+                        else rawItems = customDocs.length > 0 ? customDocs : SAMPLE_CUSTOM_DOCS;
+
+                        const q = columnSearchQuery.trim().toLowerCase();
+                        const items = q
+                          ? rawItems.filter(
+                              it =>
+                                (it.name || it.filename || '').toLowerCase().includes(q) ||
+                                (it.content || it.text_preview || '').toLowerCase().includes(q)
+                            )
+                          : rawItems;
+
                         return (
-                          <div
-                            key={idx}
-                            onClick={() => openLawFullText(law.name)}
-                            className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:border-emerald-400 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group"
-                          >
-                            <div>
-                              <div className="flex items-center justify-between gap-2 mb-2">
-                                <span
-                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                    isOrdin
-                                      ? 'bg-sky-100 text-sky-800'
-                                      : 'bg-blue-100 text-blue-800'
-                                  }`}
-                                >
-                                  {law.org || (isOrdin ? '천안시' : '대한민국 법률')}
-                                </span>
-                                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                                  {law.count}개 조문
+                          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden h-[660px]">
+                            {/* Column Header */}
+                            <div className={`p-4 border-b ${headerTheme}`}>
+                              <div className="flex items-center justify-between gap-2 mb-1">
+                                <h4 className="font-extrabold text-sm flex items-center gap-1.5">
+                                  {title}
+                                </h4>
+                                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-white/90 border border-slate-200 text-slate-700">
+                                  {items.length}건
                                 </span>
                               </div>
-                              <h4 className="font-bold text-slate-900 text-sm group-hover:text-emerald-700 transition-colors line-clamp-2 mb-2">
-                                {law.name}
-                              </h4>
+                              <p className="text-[11px] opacity-80 mb-2">{subtitle}</p>
+
+                              {/* If changeable in 2-column mode */}
+                              {canChange && onChange && (
+                                <div className="flex items-center gap-1 pt-1.5 border-t border-slate-200/60">
+                                  <span className="text-[10px] font-bold text-slate-500 mr-1">패널 전환:</span>
+                                  {(['law', 'ordinance', 'custom'] as const).map(target => (
+                                    <button
+                                      key={target}
+                                      type="button"
+                                      onClick={() => onChange(target)}
+                                      className={`text-[10px] px-2 py-0.5 rounded-md font-semibold transition cursor-pointer ${
+                                        src === target
+                                          ? 'bg-slate-900 text-white'
+                                          : 'bg-white/80 text-slate-600 hover:bg-white'
+                                      }`}
+                                    >
+                                      {target === 'law' ? '국가법령' : target === 'ordinance' ? '천안시조례' : '사내규정'}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
                             </div>
 
-                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs mt-2">
-                              <span className="text-[11px] text-slate-400">전문 보기 클릭</span>
-                              <span className="text-emerald-600 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
-                                전문 열람 ↗
-                              </span>
+                            {/* Column Card List */}
+                            <div className="p-3 overflow-y-auto space-y-2.5 flex-1 bg-slate-50/50">
+                              {items.length === 0 ? (
+                                <div className="text-center py-16 text-slate-400 text-xs">
+                                  일치하는 항목이 없습니다.
+                                </div>
+                              ) : (
+                                items.map((item, idx) => {
+                                  if (isCustom) {
+                                    const docName = item.name || item.filename || '사내 규정';
+                                    const count = item.chunk_count || 1;
+                                    return (
+                                      <div
+                                        key={item.id || idx}
+                                        onClick={() => setSelectedCustomDoc(item)}
+                                        className="p-3.5 bg-white rounded-xl border border-slate-200/80 shadow-xs hover:border-indigo-400 hover:shadow-sm transition cursor-pointer group"
+                                      >
+                                        <div className="flex items-center justify-between gap-1 mb-1.5">
+                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-800">
+                                            {catLabels[item.category] || '사내 지침'}
+                                          </span>
+                                          <span className="text-[10px] font-semibold text-slate-400">{count}개 조항</span>
+                                        </div>
+                                        <h5 className="font-bold text-slate-800 text-xs group-hover:text-indigo-700 transition line-clamp-2 mb-1.5">
+                                          {docName}
+                                        </h5>
+                                        <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-slate-100">
+                                          <span className="text-slate-400 text-[10px]">내용 확인</span>
+                                          <span className="text-indigo-600 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                                            내용 열람 ↗
+                                          </span>
+                                        </div>
+                                      </div>
+                                    );
+                                  }
+
+                                  // Law or Ordinance item
+                                  return (
+                                    <div
+                                      key={idx}
+                                      onClick={() => openLawFullText(item.name)}
+                                      className={`p-3.5 bg-white rounded-xl border border-slate-200/80 shadow-xs transition cursor-pointer group ${
+                                        isOrdin ? 'hover:border-sky-400' : 'hover:border-blue-400'
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between gap-1 mb-1.5">
+                                        <span
+                                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                            isOrdin ? 'bg-sky-100 text-sky-800' : 'bg-blue-100 text-blue-800'
+                                          }`}
+                                        >
+                                          {item.org || (isOrdin ? '충청남도 천안시' : '대한민국 법률')}
+                                        </span>
+                                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                          {item.count}개 조문
+                                        </span>
+                                      </div>
+                                      <h5
+                                        className={`font-bold text-slate-800 text-xs transition line-clamp-2 mb-1.5 ${
+                                          isOrdin ? 'group-hover:text-sky-700' : 'group-hover:text-blue-700'
+                                        }`}
+                                      >
+                                        {item.name}
+                                      </h5>
+                                      <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-slate-100">
+                                        <span className="text-slate-400 text-[10px]">제1조부터 전문</span>
+                                        <span
+                                          className={`font-semibold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 ${
+                                            isOrdin ? 'text-sky-600' : 'text-blue-600'
+                                          }`}
+                                        >
+                                          전문 열람 ↗
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              )}
+
+                              {isCustom && (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveTab('docs')}
+                                  className="w-full mt-2 py-2.5 px-3 bg-white border border-dashed border-indigo-300 rounded-xl text-xs font-bold text-indigo-700 hover:bg-indigo-50 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                                >
+                                  <FolderPlusIcon className="w-4 h-4" />
+                                  + 내 사내 규정 파일(PDF, HWP) 등록하기
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
-                      });
+                      };
+
+                      if (layoutMode === '3col') {
+                        return (
+                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            {renderDataColumn('law')}
+                            {renderDataColumn('ordinance')}
+                            {renderDataColumn('custom')}
+                          </div>
+                        );
+                      }
+
+                      if (layoutMode === '2col') {
+                        return (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            {renderDataColumn(leftSource, true, setLeftSource)}
+                            {renderDataColumn(rightSource, true, setRightSource)}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="max-w-4xl mx-auto">
+                          {renderDataColumn(singleSource)}
+                        </div>
+                      );
                     })()}
                   </div>
                 )}
@@ -1584,6 +1793,54 @@ export default function Home() {
                     </span>
                     <button
                       onClick={() => setSelectedLawFull(null)}
+                      className="px-5 py-2 bg-slate-800 text-white rounded-xl font-semibold hover:bg-slate-700 transition cursor-pointer"
+                    >
+                      닫기
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Custom Doc Reader Modal */}
+            {selectedCustomDoc && (
+              <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col border border-slate-200 animate-scale-in">
+                  <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-2xl">
+                    <div>
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-800">
+                        {catLabels[selectedCustomDoc.category] || '사내 참고자료'}
+                      </span>
+                      <h3 className="font-extrabold text-slate-900 text-lg mt-1">
+                        {selectedCustomDoc.name || selectedCustomDoc.filename}
+                      </h3>
+                    </div>
+                    <button
+                      onClick={() => setSelectedCustomDoc(null)}
+                      className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200 transition cursor-pointer"
+                    >
+                      <XMarkIcon className="w-6 h-6" />
+                    </button>
+                  </div>
+                  <div className="p-6 overflow-y-auto flex-1">
+                    <p className="text-xs text-slate-800 leading-relaxed font-mono whitespace-pre-wrap bg-slate-50 p-4 rounded-xl border border-slate-200">
+                      {selectedCustomDoc.content || selectedCustomDoc.text_preview || '본문 내용이 없습니다.'}
+                    </p>
+                  </div>
+                  <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex justify-between items-center text-xs">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedCustomDoc.content || selectedCustomDoc.text_preview || '');
+                        setCopyToast(true);
+                        setTimeout(() => setCopyToast(false), 2000);
+                      }}
+                      className="text-xs text-indigo-700 hover:underline flex items-center gap-1 cursor-pointer font-semibold"
+                    >
+                      <ClipboardDocumentIcon className="w-4 h-4" />
+                      내용 복사
+                    </button>
+                    <button
+                      onClick={() => setSelectedCustomDoc(null)}
                       className="px-5 py-2 bg-slate-800 text-white rounded-xl font-semibold hover:bg-slate-700 transition cursor-pointer"
                     >
                       닫기
