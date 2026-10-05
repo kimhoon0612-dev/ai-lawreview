@@ -30,11 +30,11 @@ def get_law_api_key() -> Optional[str]:
     return key
 
 
-def search_laws(keyword: str, api_key: str) -> List[dict]:
-    """키워드로 법령 목록을 검색합니다."""
+def search_laws(keyword: str, api_key: str, display: int = 25) -> List[dict]:
+    """키워드로 대한민국 전체 법령 목록을 실시간 검색합니다."""
     try:
         url = f"{BASE_URL}/lawSearch.do"
-        params = {"OC": api_key, "target": "law", "type": "JSON", "query": keyword, "display": 5}
+        params = {"OC": api_key, "target": "law", "type": "JSON", "query": keyword, "display": display}
         resp = requests.get(url, params=params, timeout=15)
         resp.raise_for_status()
         data = resp.json()
@@ -45,7 +45,17 @@ def search_laws(keyword: str, api_key: str) -> List[dict]:
         laws = data["LawSearch"]["law"]
         if isinstance(laws, dict):
             laws = [laws]
-        return [{"name": law.get("법령명한글", ""), "mst": law.get("법령일련번호", ""), "id": law.get("법령ID", "")} for law in laws if law.get("법령일련번호")]
+        return [
+            {
+                "name": law.get("법령명한글", ""),
+                "mst": law.get("법령일련번호", ""),
+                "id": law.get("법령ID", ""),
+                "type": law.get("법령구분명", "법률"),
+                "org": law.get("소관부처명", "대한민국"),
+                "date": law.get("시행일자", "")
+            }
+            for law in laws if law.get("법령일련번호")
+        ]
     except Exception as e:
         print(f"[법령검색 오류] {keyword}: {e}")
         return []

@@ -22,6 +22,7 @@ from vector_store import (
 )
 from law_fetcher import (
     sync_laws_from_api, get_law_api_key,
+    search_laws, fetch_law_articles,
     search_ordinances, fetch_ordinance_articles, sync_ordinances_from_api
 )
 from auth import (
@@ -738,48 +739,88 @@ async def get_laws_catalog_endpoint():
         return {"national": [], "ordinance": [], "total_laws": 0, "total_articles": 0}
 
 
+@app.get("/api/laws/live-search")
+async def live_search_laws(query: str, display: int = 25):
+    """대한민국 국가법령정보센터에서 법령을 실시간 검색합니다 (5,000+ 전체 법령)."""
+    api_key = get_law_api_key()
+    if not api_key:
+        return {
+            "query": query,
+            "total": 0,
+            "items": []
+        }
+    results = search_laws(query, api_key, display=display)
+    return {
+        "query": query,
+        "total": len(results),
+        "items": results
+    }
+
+
 @app.get("/api/laws/full-text")
-async def get_law_full_text_endpoint(source_name: str):
-    """특정 법률 또는 자치법규의 제1조부터 마지막 조항까지 전체 전문을 반환합니다."""
+async def get_law_full_text_endpoint(source_name: str, mst: Optional[str] = None):
+    """특정 법률 또는 자치법규의 제1조부터 마지막 조항까지 전체 전문을 반환합니다 (DB 캐시 및 Open API 실시간 연동)."""
     import sqlite3
     db_path = os.path.join(os.path.dirname(__file__), "chroma_db", "chroma.sqlite3")
-    if not os.path.exists(db_path):
-        return {"source_name": source_name, "total": 0, "articles": []}
-    try:
-        conn = sqlite3.connect(db_path)
-        cur = conn.cursor()
-        sql = """
-            SELECT 
-                COALESCE(m_art.string_value, '') AS article,
-                COALESCE(m_doc.string_value, '') AS content,
-                COALESCE(m_org.string_value, '') AS org
-            FROM embedding_metadata m_src
-            LEFT JOIN embedding_metadata m_art ON m_src.id = m_art.id AND m_art.key = 'article'
-            LEFT JOIN embedding_metadata m_doc ON m_src.id = m_doc.id AND m_doc.key = 'chroma:document'
-            LEFT JOIN embedding_metadata m_org ON m_src.id = m_org.id AND m_org.key = 'org'
-            WHERE m_src.key = 'source' AND (m_src.string_value = ? OR m_src.string_value LIKE ?)
-            ORDER BY m_src.id ASC
-        """
-        cur.execute(sql, (source_name.strip(), f"%{source_name.strip()}%"))
-        articles = []
-        org_name = ""
-        for art, content, org in cur.fetchall():
-            if org and not org_name:
-                org_name = org
-            articles.append({
-                "article": art,
-                "content": content
-            })
-        conn.close()
-        return {
-            "source_name": source_name,
-            "org": org_name or "대한민국",
-            "total": len(articles),
-            "articles": articles
-        }
-    except Exception as e:
-        print(f"Error fetching law full text for {source_name}: {e}")
-        return {"source_name": source_name, "total": 0, "articles": []}
+    articles = []
+    org_name = ""
+
+    # 1. 로컬 ChromaDB에서 먼저 조회
+    if os.path.exists(db_path):
+        try:
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            sql = """
+                SELECT 
+                    COALESCE(m_art.string_value, '') AS article,
+                    COALESCE(m_doc.string_value, '') AS content,
+                    COALESCE(m_org.string_value, '') AS org
+                FROM embedding_metadata m_src
+                LEFT JOIN embedding_metadata m_art ON m_src.id = m_art.id AND m_art.key = 'article'
+                LEFT JOIN embedding_metadata m_doc ON m_src.id = m_doc.id AND m_doc.key = 'chroma:document'
+                LEFT JOIN embedding_metadata m_org ON m_src.id = m_org.id AND m_org.key = 'org'
+                WHERE m_src.key = 'source' AND (m_src.string_value = ? OR m_src.string_value LIKE ?)
+                ORDER BY m_src.id ASC
+            """
+            cur.execute(sql, (source_name.strip(), f"%{source_name.strip()}%"))
+            for art, content, org in cur.fetchall():
+                if org and not org_name:
+                    org_name = org
+                articles.append({
+                    "article": art,
+                    "content": content
+                })
+            conn.close()
+        except Exception as e:
+            print(f"Error fetching law full text from db for {source_name}: {e}")
+
+    # 2. 로컬에 없는 법령인 경우 국가법령정보 Open API에서 실시간 전문 수집
+    if not articles:
+        api_key = get_law_api_key()
+        if api_key:
+            try:
+                target_mst = mst
+                if not target_mst:
+                    search_res = search_laws(source_name.strip(), api_key, display=5)
+                    if search_res:
+                        target_mst = search_res[0].get("mst")
+                if target_mst:
+                    api_articles = fetch_law_articles(target_mst, api_key)
+                    for a in api_articles:
+                        articles.append({
+                            "article": a.get("article", ""),
+                            "content": a.get("content", "")
+                        })
+                    org_name = "대한민국"
+            except Exception as e:
+                print(f"Error fetching online law {source_name}: {e}")
+
+    return {
+        "source_name": source_name,
+        "org": org_name or "대한민국",
+        "total": len(articles),
+        "articles": articles
+    }
 
 
 if __name__ == "__main__":
