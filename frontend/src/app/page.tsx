@@ -330,6 +330,10 @@ export default function Home() {
     } catch {}
   };
 
+  useEffect(() => {
+    fetchLaw();
+  }, []);
+
   const syncLaw = async () => {
     setIsSyncing(true);
     setSyncResult(null);
@@ -439,58 +443,66 @@ export default function Home() {
         </div>
       )}
 
-      {/* Header */}
-      <header className="header-gradient sticky top-0 z-30 shadow-md">
-        <div className="max-w-6xl mx-auto px-6 py-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="p-1.5 bg-blue-600/30 rounded-lg border border-blue-400/30">
-              <ScaleIcon className="w-6 h-6 text-blue-400" />
+      {/* Premium Header */}
+      <header className="header-gradient sticky top-0 z-30 shadow-xl border-b border-slate-800/80 backdrop-blur-md">
+        {/* Tier 1: Brand & User Topbar */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
+          {/* Logo & Service Title */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20 border border-blue-400/30 shrink-0">
+              <ScaleIcon className="w-5 h-5 text-white" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg font-bold text-white tracking-tight">AI LawReview</h1>
-                <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/30">v2.2</span>
+            <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-1.5">
+                <span className="text-base sm:text-lg font-extrabold text-white tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
+                  AI LawReview
+                </span>
+                <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                  v2.2
+                </span>
               </div>
-              <p className="text-xs text-slate-400 hidden sm:block">대한민국 법령 기반 계약서 검토 & 지능형 문서 분석</p>
+              <span className="hidden lg:inline-block text-slate-600 font-light">|</span>
+              <p className="text-xs text-slate-400 hidden lg:block font-normal">
+                대한민국 법령 기반 계약서 검토 & 지능형 법률 비서
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <nav className="hidden md:block">
-              <ul className="flex gap-4 text-sm font-medium">
-                {tabs.map(t => (
-                  <li
-                    key={t.id}
-                    className={`cursor-pointer transition-colors flex items-center gap-1.5 py-1 px-2 rounded-md ${
-                      activeTab === t.id ? 'text-white font-bold bg-white/10' : 'text-slate-400 hover:text-white'
-                    }`}
-                    onClick={() => {
-                      setActiveTab(t.id);
-                      if (t.id === 'review') {
-                        setResult(null);
-                        setReviewFiles([]);
-                      }
-                    }}
-                  >
-                    {t.icon}
-                    {t.label}
-                  </li>
-                ))}
-              </ul>
-            </nav>
+
+          {/* Right: DB Status Indicator & Auth Button */}
+          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+            {/* Live Database Sync Badge */}
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/90 border border-slate-700/80 text-xs shadow-inner">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0 shadow-sm shadow-emerald-400/50"></span>
+              <span className="text-slate-300 text-[11px] font-medium whitespace-nowrap">
+                {lawStatus ? (
+                  <>
+                    <strong className="text-emerald-400 font-semibold">{(lawStatus.law_count + (lawStatus.ordinance_count || 0)).toLocaleString()}</strong>개 조항 연동
+                  </>
+                ) : (
+                  '법령 DB 연결 확인 중...'
+                )}
+              </span>
+            </div>
+
+            {/* User Login / Profile Button */}
             {user ? (
-              <div className="flex items-center gap-2 ml-2 bg-slate-800/60 py-1 px-3 rounded-lg border border-slate-700">
-                <span className="text-xs text-blue-300">
-                  <UserCircleIcon className="w-4 h-4 inline mr-1" />
+              <div className="flex items-center gap-2 bg-slate-800/90 py-1 px-3 rounded-lg border border-slate-700 shadow-sm shrink-0">
+                <span className="text-xs text-blue-300 font-medium whitespace-nowrap">
+                  <UserCircleIcon className="w-4 h-4 inline mr-1 text-blue-400" />
                   {user.name}
                 </span>
-                <button onClick={handleLogout} className="text-slate-400 hover:text-white p-0.5" title="로그아웃">
+                <button
+                  onClick={handleLogout}
+                  className="text-slate-400 hover:text-white p-0.5 transition-colors"
+                  title="로그아웃"
+                >
                   <ArrowRightOnRectangleIcon className="w-4 h-4" />
                 </button>
               </div>
             ) : (
               <button
                 onClick={() => setShowAuth(true)}
-                className="text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2 rounded-lg transition-colors shadow-sm ml-2"
+                className="text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-3.5 py-1.5 rounded-lg transition-all shadow-sm hover:shadow-blue-500/25 whitespace-nowrap shrink-0 cursor-pointer"
               >
                 로그인
               </button>
@@ -498,26 +510,44 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Mobile Navigation */}
-        <div className="md:hidden border-t border-slate-800 px-4 py-2 overflow-x-auto flex gap-2">
-          {tabs.map(t => (
-            <button
-              key={t.id}
-              onClick={() => {
-                setActiveTab(t.id);
-                if (t.id === 'review') {
-                  setResult(null);
-                  setReviewFiles([]);
-                }
-              }}
-              className={`text-xs whitespace-nowrap py-1 px-2.5 rounded-md flex items-center gap-1.5 ${
-                activeTab === t.id ? 'bg-blue-600 text-white font-bold' : 'text-slate-400'
-              }`}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
+        {/* Tier 2: Dedicated Navigation Tab Bar */}
+        <div className="border-t border-slate-800/80 bg-slate-950/60 backdrop-blur-md">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6">
+            <nav className="overflow-x-auto scrollbar-none py-1.5 flex items-center gap-1 sm:gap-2">
+              {tabs.map(t => {
+                const isActive = activeTab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => {
+                      setActiveTab(t.id);
+                      if (t.id === 'review') {
+                        setResult(null);
+                        setReviewFiles([]);
+                      }
+                    }}
+                    className={`whitespace-nowrap shrink-0 text-xs font-semibold py-1.5 px-3 rounded-lg flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${
+                      isActive
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30 ring-1 ring-blue-400/40'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                    }`}
+                  >
+                    <span className="shrink-0">{t.icon}</span>
+                    <span>{t.label}</span>
+                    {t.id === 'ordinance' && (
+                      <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                        isActive 
+                          ? 'bg-white/20 text-white' 
+                          : 'bg-sky-500/20 text-sky-300 border border-sky-400/30'
+                      }`}>
+                        천안시
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
         </div>
       </header>
 
